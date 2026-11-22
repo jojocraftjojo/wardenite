@@ -5,4 +5,3 @@ members = ["crates/core", "crates/wardenite"]
 [workspace.package]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/jojocraftjojo/wardenite"

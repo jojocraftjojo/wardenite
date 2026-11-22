@@ -16,6 +16,8 @@ use wardenite_core::ticket::{channel_name, TicketError, TicketState};
 
 type Error = BoxError;
 type Context<'a> = poise::Context<'a, Data, Error>;
+/// (id, state, claimed_by, closed_by, opener_id)
+type TicketRow = (i64, String, Option<i64>, Option<i64>, i64);
 
 pub struct Data {
     pub pool: SqlitePool,
@@ -235,10 +237,8 @@ async fn event_handler(
     match event {
         serenity::FullEvent::Message { new_message } => on_message(ctx, new_message, data).await?,
         serenity::FullEvent::GuildMemberAddition { new_member } => on_member_join(ctx, new_member, data).await?,
-        serenity::FullEvent::InteractionCreate { interaction } => {
-            if let serenity::Interaction::Component(c) = interaction {
-                on_component(ctx, c, data).await?;
-            }
+        serenity::FullEvent::InteractionCreate { interaction: serenity::Interaction::Component(c) } => {
+            on_component(ctx, c, data).await?;
         }
         _ => {}
     }
@@ -414,7 +414,7 @@ async fn on_component(ctx: &serenity::Context, c: &serenity::ComponentInteractio
             respond(ctx, c, &format!("Ticket erstellt: <#{}>", channel.id.get())).await
         }
         "ticket_claim" | "ticket_close" => {
-            let row: Option<(i64, String, Option<i64>, Option<i64>, i64)> = sqlx::query_as(
+            let row: Option<TicketRow> = sqlx::query_as(
                 "SELECT id, state, claimed_by, closed_by, opener_id FROM tickets WHERE channel_id = ?",
             )
             .bind(c.channel_id.get() as i64)
