@@ -58,6 +58,46 @@ pub fn check_message(cfg: &AutomodConfig, text: &str, recent_count: u32) -> Opti
     None
 }
 
+
+/// Parst z. B. "3:timeout:60,5:kick,7:ban" (Dashboard-Eingabe).
+pub fn parse_thresholds(input: &str) -> Result<Vec<Threshold>, String> {
+    let mut out = Vec::new();
+    for part in input.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        let fields: Vec<&str> = part.split(':').map(str::trim).collect();
+        let warns: u32 = fields
+            .first()
+            .and_then(|w| w.parse().ok())
+            .ok_or_else(|| format!("ungueltige Warn-Anzahl in '{part}'"))?;
+        let action = match fields.get(1).copied() {
+            Some("kick") => Punishment::Kick,
+            Some("ban") => Punishment::Ban,
+            Some("timeout") => {
+                let minutes: u32 = fields
+                    .get(2)
+                    .and_then(|m| m.parse().ok())
+                    .ok_or_else(|| format!("Timeout braucht Minuten in '{part}'"))?;
+                Punishment::Timeout { minutes }
+            }
+            _ => return Err(format!("unbekannte Aktion in '{part}'")),
+        };
+        out.push(Threshold { warns, action });
+    }
+    Ok(out)
+}
+
+/// Gegenstueck zu `parse_thresholds`.
+pub fn format_thresholds(thresholds: &[Threshold]) -> String {
+    thresholds
+        .iter()
+        .map(|t| match &t.action {
+            Punishment::Kick => format!("{}:kick", t.warns),
+            Punishment::Ban => format!("{}:ban", t.warns),
+            Punishment::Timeout { minutes } => format!("{}:timeout:{}", t.warns, minutes),
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,6 +117,17 @@ mod tests {
         assert_eq!(escalation(3, &t), Some(&Punishment::Timeout { minutes: 60 }));
         assert_eq!(escalation(7, &t), Some(&Punishment::Ban));
         assert_eq!(escalation(8, &t), None);
+    }
+
+    #[test]
+    fn parse_roundtrip() {
+        let t = parse_thresholds("3:timeout:60, 5:kick,7:ban").unwrap();
+        assert_eq!(t, th());
+        assert_eq!(format_thresholds(&t), "3:timeout:60,5:kick,7:ban");
+        assert!(parse_thresholds("x:kick").is_err());
+        assert!(parse_thresholds("3:timeout").is_err());
+        assert!(parse_thresholds("3:explode").is_err());
+        assert_eq!(parse_thresholds("").unwrap(), vec![]);
     }
 
     #[test]
