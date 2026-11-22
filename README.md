@@ -26,6 +26,6 @@ cargo test --workspace
 ```
 
 ## Deployment (Tailscale + SFTP)
-Siehe `deploy/`. Das Dashboard muss oeffentlich per HTTPS erreichbar sein (Bot-Einladung, OAuth2-Redirect): Caddy mit Domain oder Tailscale Funnel.
+Siehe `deploy/`. Das Dashboard muss oeffentlich per HTTPS erreichbar sein (Bot-Einladung, OAuth2-Redirect): Caddy mit Domain oder Tailscale Funnel. Schritt-fuer-Schritt: [deploy/DEPLOY.md](deploy/DEPLOY.md).
 
 Lizenz: MIT
