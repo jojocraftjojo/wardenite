@@ -2,12 +2,19 @@
 
 Open-Source-Discord-Bot mit Web-Dashboard, geschrieben in Rust. Moderation, Ticketsystem, Server-Designer mit Templates.
 
-**Status: frueh.** Vorhanden und getestet (Unit-Tests): Template-Schema mit additivem Diff, Warn-Eskalation und Automod-Pruefungen, Ticket-Zustandsmaschine, DB-Schema, Deploy-Dateien. Noch **nicht** vorhanden: Bot-Anbindung an Discord (poise/serenity), Dashboard (axum), OAuth2-Login.
+**Status: frueh, nicht gegen echtes Discord getestet.** Kompiliert, Clippy sauber, 14 Unit-Tests gruen (CI).
+
+- Bot (poise/serenity): `/ban`, `/kick`, `/timeout`, `/warn` mit Eskalation, `/warns`, `/purge`, `/ticketpanel`, Automod (Einladungen, Woerter, Spam), Mod-Log, Willkommen, Auto-Rolle, Tickets mit Transkript.
+- Dashboard (axum): Discord-OAuth2-Login, Serverliste mit Bot-Einladung, Einstellungen, Ticket-Panel, Transkripte, Mod-Log, Server-Designer mit Vorschau (nur additiv, loescht nie).
+- Noch offen: Praxistest mit Discord-App, Reaction-Roles, erweitertes Logging, Hosting auf dem Server.
+
+Der Bot braucht im Developer Portal die Intents **Message Content** und **Server Members**.
 
 Details: [Design](docs/superpowers/specs/2026-11-22-wardenite-design.md).
 
 ## Struktur
 - `crates/core`: Discord-unabhaengige Logik mit Tests
+- `crates/wardenite`: Binary mit Bot, Dashboard und Server-Designer
 - `templates/`: Server-Templates (JSON)
 - `migrations/`: SQLite-Schema
 - `deploy/`: systemd, Caddy/Funnel, SFTP-Deploy-Skript
