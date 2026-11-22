@@ -4,9 +4,9 @@ Open-Source-Discord-Bot mit Web-Dashboard, geschrieben in Rust. Moderation, Tick
 
 **Status: frueh, nicht gegen echtes Discord getestet.** Kompiliert, Clippy sauber, 14 Unit-Tests gruen (CI).
 
-- Bot (poise/serenity): `/ban`, `/kick`, `/timeout`, `/warn` mit Eskalation, `/warns`, `/purge`, `/ticketpanel`, Automod (Einladungen, Woerter, Spam), Mod-Log, Willkommen, Auto-Rolle, Tickets mit Transkript.
+- Bot (poise/serenity): `/ban`, `/kick`, `/timeout`, `/warn` mit Eskalation, `/warns`, `/purge`, `/ticketpanel`, Automod (Einladungen, Woerter, Spam), Mod-Log, Willkommen, Auto-Rolle, Rollen-Buttons (`/rolepanel`), Event-Logging (Beitritt, Austritt, geloeschte Nachrichten), Tickets mit Transkript.
 - Dashboard (axum): Discord-OAuth2-Login, Serverliste mit Bot-Einladung, Einstellungen, Ticket-Panel, Transkripte, Mod-Log, Server-Designer mit Vorschau (nur additiv, loescht nie).
-- Noch offen: Praxistest mit Discord-App, Reaction-Roles, erweitertes Logging, Hosting auf dem Server.
+- Noch offen: Praxistest mit Discord-App, Hosting auf dem Server.
 
 Der Bot braucht im Developer Portal die Intents **Message Content** und **Server Members**.
 

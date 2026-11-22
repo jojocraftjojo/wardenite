@@ -225,8 +225,35 @@ pub async fn post_ticket_panel(
     Ok(())
 }
 
+/// Slash-Command: Button-Panel, ueber das sich Mitglieder eine Rolle selbst geben/nehmen.
+#[poise::command(slash_command, guild_only, required_permissions = "MANAGE_ROLES")]
+pub async fn rolepanel(ctx: Context<'_>, role: serenity::Role, label: Option<String>) -> Result<(), Error> {
+    if role.permissions.contains(Permissions::ADMINISTRATOR) {
+        ctx.say("Rollen mit Administrator-Recht koennen nicht per Button vergeben werden.").await?;
+        return Ok(());
+    }
+    let text = label.unwrap_or_else(|| role.name.clone());
+    let msg = CreateMessage::new()
+        .content(format!("Klicke, um die Rolle **{}** zu erhalten oder zu entfernen.", role.name))
+        .components(vec![CreateActionRow::Buttons(vec![
+            CreateButton::new(format!("role_{}", role.id.get())).label(text).style(ButtonStyle::Secondary),
+        ])]);
+    ctx.channel_id().send_message(ctx.http(), msg).await?;
+    ctx.say("Rollen-Panel erstellt.").await?;
+    Ok(())
+}
+
+/// Schreibt ein Ereignis in den Mod-Log-Kanal (falls konfiguriert).
+async fn log_event(pool: &SqlitePool, http: &serenity::Http, guild: GuildId, text: String) -> Result<(), Error> {
+    let settings = db::get_settings(pool, guild.get() as i64).await?;
+    if let Some(ch) = settings.modlog_channel {
+        let _ = ChannelId::new(ch as u64).say(http, text).await;
+    }
+    Ok(())
+}
+
 pub fn commands() -> Vec<poise::Command<Data, Error>> {
-    vec![ban(), kick(), timeout(), warn(), warns(), purge(), ticketpanel()]
+    vec![ban(), kick(), timeout(), warn(), warns(), purge(), ticketpanel(), rolepanel()]
 }
 
 async fn event_handler(
@@ -237,6 +264,12 @@ async fn event_handler(
     match event {
         serenity::FullEvent::Message { new_message } => on_message(ctx, new_message, data).await?,
         serenity::FullEvent::GuildMemberAddition { new_member } => on_member_join(ctx, new_member, data).await?,
+        serenity::FullEvent::GuildMemberRemoval { guild_id, user, .. } => {
+            log_event(&data.pool, &ctx.http, *guild_id, format!("Mitglied hat den Server verlassen: {} (<@{}>)", user.name, user.id.get())).await?;
+        }
+        serenity::FullEvent::MessageDelete { channel_id, guild_id: Some(guild_id), .. } => {
+            log_event(&data.pool, &ctx.http, *guild_id, format!("Nachricht geloescht in <#{}>", channel_id.get())).await?;
+        }
         serenity::FullEvent::InteractionCreate { interaction: serenity::Interaction::Component(c) } => {
             on_component(ctx, c, data).await?;
         }
@@ -304,6 +337,7 @@ async fn on_message(ctx: &serenity::Context, msg: &serenity::Message, data: &Dat
 
 async fn on_member_join(ctx: &serenity::Context, member: &serenity::Member, data: &Data) -> Result<(), Error> {
     let settings = db::get_settings(&data.pool, member.guild_id.get() as i64).await?;
+    log_event(&data.pool, &ctx.http, member.guild_id, format!("Mitglied beigetreten: <@{}>", member.user.id.get())).await?;
     if let Some(role) = settings.autorole_id {
         let _ = member.add_role(&ctx.http, RoleId::new(role as u64)).await;
     }
@@ -352,6 +386,19 @@ async fn is_staff(pool: &SqlitePool, c: &serenity::ComponentInteraction, guild: 
 async fn on_component(ctx: &serenity::Context, c: &serenity::ComponentInteraction, data: &Data) -> Result<(), Error> {
     let Some(guild) = c.guild_id else { return Ok(()) };
     let pool = &data.pool;
+    if let Some(id) = c.data.custom_id.strip_prefix("role_").and_then(|v| v.parse::<u64>().ok()).filter(|v| *v > 0) {
+        let Some(member) = &c.member else { return Ok(()) };
+        let role = RoleId::new(id);
+        let result = if member.roles.contains(&role) {
+            member.remove_role(&ctx.http, role).await.map(|_| "Rolle entfernt.")
+        } else {
+            member.add_role(&ctx.http, role).await.map(|_| "Rolle hinzugefuegt.")
+        };
+        return match result {
+            Ok(msg) => respond(ctx, c, msg).await,
+            Err(_) => respond(ctx, c, "Die Rolle konnte nicht vergeben werden (Rollen-Hierarchie des Bots pruefen).").await,
+        };
+    }
     match c.data.custom_id.as_str() {
         "ticket_open" => {
             let open: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tickets WHERE guild_id = ? AND opener_id = ? AND state != 'closed'")
