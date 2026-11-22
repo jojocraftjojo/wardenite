@@ -1,7 +1,10 @@
 //! Server-Designer: wendet ein Template additiv auf einen Discord-Server an.
 use crate::config::BoxError;
 use poise::serenity_prelude as serenity;
-use serenity::{ChannelId, ChannelType, CreateChannel, EditRole, GuildId, PermissionOverwrite, PermissionOverwriteType, Permissions, RoleId};
+use serenity::{
+    ChannelId, ChannelType, CreateChannel, EditRole, GuildId, PermissionOverwrite,
+    PermissionOverwriteType, Permissions, RoleId,
+};
 use std::collections::HashMap;
 use wardenite_core::template::{ChannelKind, GuildSnapshot, Plan, Template};
 
@@ -20,7 +23,10 @@ pub async fn snapshot(http: &serenity::Http, guild: GuildId) -> Result<GuildSnap
             (cat.name.clone(), children)
         })
         .collect();
-    Ok(GuildSnapshot { roles: roles.iter().map(|r| r.name.clone()).collect(), categories })
+    Ok(GuildSnapshot {
+        roles: roles.iter().map(|r| r.name.clone()).collect(),
+        categories,
+    })
 }
 
 fn permissions_from(names: &[String]) -> Permissions {
@@ -45,12 +51,18 @@ fn overwrites(
     }
     let mut out = Vec::new();
     if !deny.is_empty() {
-        out.push(PermissionOverwrite { allow: Permissions::empty(), deny, kind: PermissionOverwriteType::Role(everyone) });
+        out.push(PermissionOverwrite {
+            allow: Permissions::empty(),
+            deny,
+            kind: PermissionOverwriteType::Role(everyone),
+        });
     }
     for name in visible_to {
         if let Some(id) = roles.get(&name.to_lowercase()) {
             out.push(PermissionOverwrite {
-                allow: Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES | Permissions::READ_MESSAGE_HISTORY,
+                allow: Permissions::VIEW_CHANNEL
+                    | Permissions::SEND_MESSAGES
+                    | Permissions::READ_MESSAGE_HISTORY,
                 deny: Permissions::empty(),
                 kind: PermissionOverwriteType::Role(*id),
             });
@@ -60,7 +72,12 @@ fn overwrites(
 }
 
 /// Fuehrt den Plan aus (nur Erstellen, nie Loeschen). Liefert ein Protokoll.
-pub async fn apply(http: &serenity::Http, guild: GuildId, template: &Template, plan: &Plan) -> Result<Vec<String>, BoxError> {
+pub async fn apply(
+    http: &serenity::Http,
+    guild: GuildId,
+    template: &Template,
+    plan: &Plan,
+) -> Result<Vec<String>, BoxError> {
     let mut log = Vec::new();
     let everyone = RoleId::new(guild.get());
 
@@ -70,7 +87,11 @@ pub async fn apply(http: &serenity::Http, guild: GuildId, template: &Template, p
         .into_iter()
         .map(|r| (r.name.to_lowercase(), r.id))
         .collect();
-    for spec in template.roles.iter().filter(|r| plan.create_roles.contains(&r.name)) {
+    for spec in template
+        .roles
+        .iter()
+        .filter(|r| plan.create_roles.contains(&r.name))
+    {
         let mut b = EditRole::new()
             .name(&spec.name)
             .hoist(spec.hoist)
@@ -104,7 +125,11 @@ pub async fn apply(http: &serenity::Http, guild: GuildId, template: &Template, p
         }
         let parent = category_ids.get(&cat.name.to_lowercase()).copied();
         for ch in &cat.channels {
-            if !plan.create_channels.iter().any(|(c, n)| c == &cat.name && n == &ch.name) {
+            if !plan
+                .create_channels
+                .iter()
+                .any(|(c, n)| c == &cat.name && n == &ch.name)
+            {
                 continue;
             }
             let kind = match ch.kind {
@@ -115,11 +140,18 @@ pub async fn apply(http: &serenity::Http, guild: GuildId, template: &Template, p
             };
             let mut b = CreateChannel::new(&ch.name)
                 .kind(kind)
-                .permissions(overwrites(everyone, &cat.visible_to, &role_ids, ch.read_only));
+                .permissions(overwrites(
+                    everyone,
+                    &cat.visible_to,
+                    &role_ids,
+                    ch.read_only,
+                ));
             if let Some(p) = parent {
                 b = b.category(p);
             }
-            if let (Some(topic), ChannelKind::Text | ChannelKind::Announcement) = (&ch.topic, ch.kind) {
+            if let (Some(topic), ChannelKind::Text | ChannelKind::Announcement) =
+                (&ch.topic, ch.kind)
+            {
                 b = b.topic(topic);
             }
             guild.create_channel(http, b).await?;

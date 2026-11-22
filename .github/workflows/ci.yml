@@ -12,7 +12,19 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      - run: cargo fmt --all -- --check
-        continue-on-error: true # TODO: lokal 'cargo fmt' ausfuehren und hier wieder blockierend machen
+  release:
+    needs: check
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04 # aeltere glibc fuer breite Server-Kompatibilitaet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p wardenite
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wardenite-linux-x86_64
+          path: target/release/wardenite

@@ -71,7 +71,8 @@ pub struct ChannelSpec {
 
 impl Template {
     pub fn from_json(s: &str) -> Result<Self, TemplateError> {
-        let t: Template = serde_json::from_str(s).map_err(|e| TemplateError::Parse(e.to_string()))?;
+        let t: Template =
+            serde_json::from_str(s).map_err(|e| TemplateError::Parse(e.to_string()))?;
         t.validate()?;
         Ok(t)
     }
@@ -120,7 +121,9 @@ pub struct Plan {
 
 impl Plan {
     pub fn is_empty(&self) -> bool {
-        self.create_roles.is_empty() && self.create_categories.is_empty() && self.create_channels.is_empty()
+        self.create_roles.is_empty()
+            && self.create_categories.is_empty()
+            && self.create_channels.is_empty()
     }
 }
 
@@ -137,7 +140,10 @@ pub fn plan(template: &Template, guild: &GuildSnapshot) -> Plan {
         }
     }
     for cat in &template.categories {
-        let existing = guild.categories.iter().find(|(n, _)| norm(n) == norm(&cat.name));
+        let existing = guild
+            .categories
+            .iter()
+            .find(|(n, _)| norm(n) == norm(&cat.name));
         let have_channels: HashSet<String> = existing
             .map(|(_, ch)| ch.iter().map(|c| norm(c)).collect())
             .unwrap_or_default();
@@ -150,7 +156,8 @@ pub fn plan(template: &Template, guild: &GuildSnapshot) -> Plan {
             if have_channels.contains(&norm(&ch.name)) {
                 out.skipped.push(format!("Kanal {}/{}", cat.name, ch.name));
             } else {
-                out.create_channels.push((cat.name.clone(), ch.name.clone()));
+                out.create_channels
+                    .push((cat.name.clone(), ch.name.clone()));
             }
         }
     }
@@ -182,14 +189,21 @@ mod tests {
 
     #[test]
     fn rejects_unknown_role() {
-        let j = r#"{"name":"x","description":"","categories":[{"name":"A","visible_to":["Ghost"]}]}"#;
-        assert_eq!(Template::from_json(j), Err(TemplateError::UnknownRole("Ghost".into())));
+        let j =
+            r#"{"name":"x","description":"","categories":[{"name":"A","visible_to":["Ghost"]}]}"#;
+        assert_eq!(
+            Template::from_json(j),
+            Err(TemplateError::UnknownRole("Ghost".into()))
+        );
     }
 
     #[test]
     fn rejects_duplicate_roles() {
         let j = r#"{"name":"x","description":"","roles":[{"name":"A"},{"name":"a"}]}"#;
-        assert!(matches!(Template::from_json(j), Err(TemplateError::Duplicate(_))));
+        assert!(matches!(
+            Template::from_json(j),
+            Err(TemplateError::Duplicate(_))
+        ));
     }
 
     #[test]
@@ -203,7 +217,12 @@ mod tests {
             categories: t
                 .categories
                 .iter()
-                .map(|c| (c.name.clone(), c.channels.iter().map(|ch| ch.name.clone()).collect()))
+                .map(|c| {
+                    (
+                        c.name.clone(),
+                        c.channels.iter().map(|ch| ch.name.clone()).collect(),
+                    )
+                })
                 .collect(),
         };
         assert!(plan(t, &applied).is_empty());
@@ -215,9 +234,15 @@ mod tests {
             r#"{"name":"x","description":"","roles":[{"name":"Mod"}],"categories":[{"name":"Info","channels":[{"name":"regeln","kind":"text"}]}]}"#,
         )
         .unwrap();
-        let g = GuildSnapshot { roles: vec!["mod".into()], categories: vec![("INFO".into(), vec![])] };
+        let g = GuildSnapshot {
+            roles: vec!["mod".into()],
+            categories: vec![("INFO".into(), vec![])],
+        };
         let p = plan(&t, &g);
         assert!(p.create_roles.is_empty() && p.create_categories.is_empty());
-        assert_eq!(p.create_channels, vec![("Info".to_string(), "regeln".to_string())]);
+        assert_eq!(
+            p.create_channels,
+            vec![("Info".to_string(), "regeln".to_string())]
+        );
     }
 }

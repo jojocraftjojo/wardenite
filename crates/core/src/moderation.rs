@@ -17,7 +17,10 @@ pub struct Threshold {
 
 /// Liefert die Strafe, die bei genau `count` Verwarnungen ausgeloest wird.
 pub fn escalation(count: u32, thresholds: &[Threshold]) -> Option<&Punishment> {
-    thresholds.iter().find(|t| t.warns == count).map(|t| &t.action)
+    thresholds
+        .iter()
+        .find(|t| t.warns == count)
+        .map(|t| &t.action)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -37,7 +40,9 @@ pub enum Violation {
 
 pub fn contains_invite(text: &str) -> bool {
     let t = text.to_lowercase();
-    t.contains("discord.gg/") || t.contains("discord.com/invite/") || t.contains("discordapp.com/invite/")
+    t.contains("discord.gg/")
+        || t.contains("discord.com/invite/")
+        || t.contains("discordapp.com/invite/")
 }
 
 /// `recent_count` = Nachrichten des Users im aktuellen Zeitfenster (inkl. dieser).
@@ -48,7 +53,11 @@ pub fn check_message(cfg: &AutomodConfig, text: &str, recent_count: u32) -> Opti
     let lower = text.to_lowercase();
     for w in &cfg.banned_words {
         let w = w.to_lowercase();
-        if !w.is_empty() && lower.split(|c: char| !c.is_alphanumeric()).any(|tok| tok == w) {
+        if !w.is_empty()
+            && lower
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|tok| tok == w)
+        {
             return Some(Violation::BannedWord(w));
         }
     }
@@ -57,7 +66,6 @@ pub fn check_message(cfg: &AutomodConfig, text: &str, recent_count: u32) -> Opti
     }
     None
 }
-
 
 /// Parst z. B. "3:timeout:60,5:kick,7:ban" (Dashboard-Eingabe).
 pub fn parse_thresholds(input: &str) -> Result<Vec<Threshold>, String> {
@@ -104,9 +112,18 @@ mod tests {
 
     fn th() -> Vec<Threshold> {
         vec![
-            Threshold { warns: 3, action: Punishment::Timeout { minutes: 60 } },
-            Threshold { warns: 5, action: Punishment::Kick },
-            Threshold { warns: 7, action: Punishment::Ban },
+            Threshold {
+                warns: 3,
+                action: Punishment::Timeout { minutes: 60 },
+            },
+            Threshold {
+                warns: 5,
+                action: Punishment::Kick,
+            },
+            Threshold {
+                warns: 7,
+                action: Punishment::Ban,
+            },
         ]
     }
 
@@ -114,7 +131,10 @@ mod tests {
     fn escalation_hits_exact_thresholds() {
         let t = th();
         assert_eq!(escalation(2, &t), None);
-        assert_eq!(escalation(3, &t), Some(&Punishment::Timeout { minutes: 60 }));
+        assert_eq!(
+            escalation(3, &t),
+            Some(&Punishment::Timeout { minutes: 60 })
+        );
         assert_eq!(escalation(7, &t), Some(&Punishment::Ban));
         assert_eq!(escalation(8, &t), None);
     }
@@ -138,14 +158,23 @@ mod tests {
 
     #[test]
     fn banned_words_match_whole_words_only() {
-        let cfg = AutomodConfig { banned_words: vec!["ass".into()], ..Default::default() };
+        let cfg = AutomodConfig {
+            banned_words: vec!["ass".into()],
+            ..Default::default()
+        };
         assert_eq!(check_message(&cfg, "class is fun", 1), None);
-        assert_eq!(check_message(&cfg, "you ass!", 1), Some(Violation::BannedWord("ass".into())));
+        assert_eq!(
+            check_message(&cfg, "you ass!", 1),
+            Some(Violation::BannedWord("ass".into()))
+        );
     }
 
     #[test]
     fn spam_threshold() {
-        let cfg = AutomodConfig { spam_max_messages: 5, ..Default::default() };
+        let cfg = AutomodConfig {
+            spam_max_messages: 5,
+            ..Default::default()
+        };
         assert_eq!(check_message(&cfg, "hi", 5), None);
         assert_eq!(check_message(&cfg, "hi", 6), Some(Violation::Spam));
     }

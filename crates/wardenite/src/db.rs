@@ -6,8 +6,13 @@ use std::str::FromStr;
 use wardenite_core::moderation::{self, AutomodConfig, Threshold};
 
 pub async fn connect(url: &str) -> Result<SqlitePool, BoxError> {
-    let opts = SqliteConnectOptions::from_str(url)?.create_if_missing(true).foreign_keys(true);
-    let pool = SqlitePoolOptions::new().max_connections(5).connect_with(opts).await?;
+    let opts = SqliteConnectOptions::from_str(url)?
+        .create_if_missing(true)
+        .foreign_keys(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(opts)
+        .await?;
     sqlx::migrate!("../../migrations").run(&pool).await?;
     Ok(pool)
 }

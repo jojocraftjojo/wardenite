@@ -51,13 +51,18 @@ impl UserGuild {
 // ---------- Helfer ----------
 
 fn esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn urlenc(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
             _ => format!("%{b:02X}"),
         })
         .collect()
@@ -80,30 +85,51 @@ table{{width:100%;border-collapse:collapse}}td,th{{padding:.4rem;border-bottom:1
 fn wrap(r: Result<Response, BoxError>) -> Response {
     r.unwrap_or_else(|e| {
         tracing::error!("Fehler im Dashboard: {e}");
-        (StatusCode::INTERNAL_SERVER_ERROR, page("Fehler", &format!("<p>Interner Fehler: {}</p>", esc(&e.to_string())))).into_response()
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            page(
+                "Fehler",
+                &format!("<p>Interner Fehler: {}</p>", esc(&e.to_string())),
+            ),
+        )
+            .into_response()
     })
 }
 
 fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     let raw = headers.get(header::COOKIE)?.to_str().ok()?;
-    raw.split(';').filter_map(|p| p.trim().split_once('=')).find(|(k, _)| *k == name).map(|(_, v)| v.to_string())
+    raw.split(';')
+        .filter_map(|p| p.trim().split_once('='))
+        .find(|(k, _)| *k == name)
+        .map(|(_, v)| v.to_string())
 }
 
 fn set_cookie(cfg: &Config, name: &str, value: &str, max_age: i64) -> HeaderValue {
-    let secure = if cfg.base_url.starts_with("https") { "; Secure" } else { "" };
-    HeaderValue::from_str(&format!("{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}"))
-        .unwrap_or_else(|_| HeaderValue::from_static(""))
+    let secure = if cfg.base_url.starts_with("https") {
+        "; Secure"
+    } else {
+        ""
+    };
+    HeaderValue::from_str(&format!(
+        "{name}={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}"
+    ))
+    .unwrap_or_else(|_| HeaderValue::from_static(""))
 }
 
 async fn session(state: &AppState, headers: &HeaderMap) -> Result<Option<Session>, BoxError> {
-    let Some(id) = cookie(headers, "wsid") else { return Ok(None) };
+    let Some(id) = cookie(headers, "wsid") else {
+        return Ok(None);
+    };
     let row: Option<(String, String)> = sqlx::query_as(
         "SELECT username, access_token FROM sessions WHERE id = ? AND expires_at > datetime('now')",
     )
     .bind(id)
     .fetch_optional(&state.pool)
     .await?;
-    Ok(row.map(|(username, access_token)| Session { username, access_token }))
+    Ok(row.map(|(username, access_token)| Session {
+        username,
+        access_token,
+    }))
 }
 
 async fn user_guilds(state: &AppState, s: &Session) -> Result<Vec<UserGuild>, BoxError> {
@@ -129,14 +155,28 @@ fn invite_url(cfg: &Config, guild: Option<&str>) -> String {
 }
 
 /// Prueft Login und Verwaltungsrecht; Err enthaelt die fertige Antwort (Redirect/403).
-async fn authorize(state: &AppState, headers: &HeaderMap, gid: i64) -> Result<Result<(Session, GuildId), Response>, BoxError> {
+async fn authorize(
+    state: &AppState,
+    headers: &HeaderMap,
+    gid: i64,
+) -> Result<Result<(Session, GuildId), Response>, BoxError> {
     let Some(sess) = session(state, headers).await? else {
         return Ok(Err(Redirect::to("/login").into_response()));
     };
     let guilds = user_guilds(state, &sess).await?;
-    let ok = gid > 0 && guilds.iter().any(|g| g.id == gid.to_string() && g.can_manage());
+    let ok = gid > 0
+        && guilds
+            .iter()
+            .any(|g| g.id == gid.to_string() && g.can_manage());
     if !ok {
-        return Ok(Err((StatusCode::FORBIDDEN, page("Kein Zugriff", "<p>Dir fehlt die Berechtigung fuer diesen Server.</p>")).into_response()));
+        return Ok(Err((
+            StatusCode::FORBIDDEN,
+            page(
+                "Kein Zugriff",
+                "<p>Dir fehlt die Berechtigung fuer diesen Server.</p>",
+            ),
+        )
+            .into_response()));
     }
     Ok(Ok((sess, GuildId::new(gid as u64))))
 }
@@ -151,7 +191,11 @@ fn nav(gid: i64) -> String {
 fn select(name: &str, options: &[(i64, String)], selected: Option<i64>) -> String {
     let mut s = format!("<select name=\"{name}\"><option value=\"\">(keiner)</option>");
     for (id, label) in options {
-        let sel = if Some(*id) == selected { " selected" } else { "" };
+        let sel = if Some(*id) == selected {
+            " selected"
+        } else {
+            ""
+        };
         let _ = write!(s, "<option value=\"{id}\"{sel}>{}</option>", esc(label));
     }
     s.push_str("</select>");
@@ -163,12 +207,27 @@ fn parse_id(s: &str) -> Option<i64> {
 }
 
 /// Text-/Kategorie-Kanaele und Rollen eines Servers fuer Auswahlfelder.
-async fn lists(state: &AppState, gid: GuildId) -> Result<(Vec<(i64, String)>, Vec<(i64, String)>, Vec<(i64, String)>), BoxError> {
+async fn lists(
+    state: &AppState,
+    gid: GuildId,
+) -> Result<(Vec<(i64, String)>, Vec<(i64, String)>, Vec<(i64, String)>), BoxError> {
     let channels = state.http.get_channels(gid).await?;
     let roles = state.http.get_guild_roles(gid).await?;
-    let text = channels.iter().filter(|c| c.kind == ChannelType::Text).map(|c| (c.id.get() as i64, format!("#{}", c.name))).collect();
-    let cats = channels.iter().filter(|c| c.kind == ChannelType::Category).map(|c| (c.id.get() as i64, c.name.clone())).collect();
-    let roles = roles.iter().filter(|r| r.id.get() != gid.get()).map(|r| (r.id.get() as i64, r.name.clone())).collect();
+    let text = channels
+        .iter()
+        .filter(|c| c.kind == ChannelType::Text)
+        .map(|c| (c.id.get() as i64, format!("#{}", c.name)))
+        .collect();
+    let cats = channels
+        .iter()
+        .filter(|c| c.kind == ChannelType::Category)
+        .map(|c| (c.id.get() as i64, c.name.clone()))
+        .collect();
+    let roles = roles
+        .iter()
+        .filter(|r| r.id.get() != gid.get())
+        .map(|r| (r.id.get() as i64, r.name.clone()))
+        .collect();
     Ok((text, cats, roles))
 }
 
@@ -188,7 +247,10 @@ pub async fn serve(state: AppState) -> Result<(), BoxError> {
         .route("/guild/:gid/tickets/:tid", get(transcript))
         .route("/guild/:gid/modlog", get(modlog))
         .route("/guild/:gid/designer", get(designer_list))
-        .route("/guild/:gid/designer/:name", get(designer_preview).post(designer_apply))
+        .route(
+            "/guild/:gid/designer/:name",
+            get(designer_preview).post(designer_apply),
+        )
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("Dashboard auf http://{addr}");
@@ -220,7 +282,10 @@ async fn login(State(s): State<AppState>) -> Response {
         state_token
     );
     let mut resp = Redirect::to(&url).into_response();
-    resp.headers_mut().append(header::SET_COOKIE, set_cookie(&s.cfg, "wstate", &state_token, 600));
+    resp.headers_mut().append(
+        header::SET_COOKIE,
+        set_cookie(&s.cfg, "wstate", &state_token, 600),
+    );
     resp
 }
 
@@ -242,13 +307,28 @@ struct DiscordUser {
     username: String,
 }
 
-async fn callback(State(s): State<AppState>, headers: HeaderMap, Query(q): Query<CallbackQuery>) -> Response {
+async fn callback(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<CallbackQuery>,
+) -> Response {
     wrap(callback_inner(s, headers, q).await)
 }
 
-async fn callback_inner(s: AppState, headers: HeaderMap, q: CallbackQuery) -> Result<Response, BoxError> {
+async fn callback_inner(
+    s: AppState,
+    headers: HeaderMap,
+    q: CallbackQuery,
+) -> Result<Response, BoxError> {
     if cookie(&headers, "wstate").as_deref() != Some(q.state.as_str()) {
-        return Ok((StatusCode::BAD_REQUEST, page("Fehler", "<p>Ungueltiger Login-Status. Bitte erneut versuchen.</p>")).into_response());
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            page(
+                "Fehler",
+                "<p>Ungueltiger Login-Status. Bitte erneut versuchen.</p>",
+            ),
+        )
+            .into_response());
     }
     let redirect = format!("{}/callback", s.cfg.base_url);
     let token: TokenResponse = s
@@ -285,17 +365,25 @@ async fn callback_inner(s: AppState, headers: HeaderMap, q: CallbackQuery) -> Re
         .execute(&s.pool)
         .await?;
     let mut resp = Redirect::to("/dashboard").into_response();
-    resp.headers_mut().append(header::SET_COOKIE, set_cookie(&s.cfg, "wsid", &sid, token.expires_in));
-    resp.headers_mut().append(header::SET_COOKIE, set_cookie(&s.cfg, "wstate", "", 0));
+    resp.headers_mut().append(
+        header::SET_COOKIE,
+        set_cookie(&s.cfg, "wsid", &sid, token.expires_in),
+    );
+    resp.headers_mut()
+        .append(header::SET_COOKIE, set_cookie(&s.cfg, "wstate", "", 0));
     Ok(resp)
 }
 
 async fn logout(State(s): State<AppState>, headers: HeaderMap) -> Response {
     if let Some(id) = cookie(&headers, "wsid") {
-        let _ = sqlx::query("DELETE FROM sessions WHERE id = ?").bind(id).execute(&s.pool).await;
+        let _ = sqlx::query("DELETE FROM sessions WHERE id = ?")
+            .bind(id)
+            .execute(&s.pool)
+            .await;
     }
     let mut resp = Redirect::to("/").into_response();
-    resp.headers_mut().append(header::SET_COOKIE, set_cookie(&s.cfg, "wsid", "", 0));
+    resp.headers_mut()
+        .append(header::SET_COOKIE, set_cookie(&s.cfg, "wsid", "", 0));
     resp
 }
 
@@ -306,16 +394,30 @@ async fn dashboard(State(s): State<AppState>, headers: HeaderMap) -> Response {
 }
 
 async fn dashboard_inner(s: AppState, headers: HeaderMap) -> Result<Response, BoxError> {
-    let Some(sess) = session(&s, &headers).await? else { return Ok(Redirect::to("/login").into_response()) };
+    let Some(sess) = session(&s, &headers).await? else {
+        return Ok(Redirect::to("/login").into_response());
+    };
     let guilds = user_guilds(&s, &sess).await?;
-    let bot_guilds: Vec<u64> = s.http.get_guilds(None, Some(200)).await?.iter().map(|g| g.id.get()).collect();
+    let bot_guilds: Vec<u64> = s
+        .http
+        .get_guilds(None, Some(200))
+        .await?
+        .iter()
+        .map(|g| g.id.get())
+        .collect();
     let mut rows = String::new();
     for g in guilds.iter().filter(|g| g.can_manage()) {
-        let present = g.id.parse::<u64>().map(|id| bot_guilds.contains(&id)).unwrap_or(false);
+        let present =
+            g.id.parse::<u64>()
+                .map(|id| bot_guilds.contains(&id))
+                .unwrap_or(false);
         let action = if present {
             format!("<a href=\"/guild/{}\">Verwalten</a>", esc(&g.id))
         } else {
-            format!("<a href=\"{}\">Bot einladen</a>", esc(&invite_url(&s.cfg, Some(&g.id))))
+            format!(
+                "<a href=\"{}\">Bot einladen</a>",
+                esc(&invite_url(&s.cfg, Some(&g.id)))
+            )
         };
         let _ = write!(rows, "<tr><td>{}</td><td>{action}</td></tr>", esc(&g.name));
     }
@@ -328,17 +430,32 @@ async fn dashboard_inner(s: AppState, headers: HeaderMap) -> Result<Response, Bo
 
 // ---------- Einstellungen ----------
 
-async fn settings_page(State(s): State<AppState>, headers: HeaderMap, Path(gid): Path<i64>) -> Response {
+async fn settings_page(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(gid): Path<i64>,
+) -> Response {
     wrap(settings_page_inner(s, headers, gid).await)
 }
 
-async fn settings_page_inner(s: AppState, headers: HeaderMap, gid: i64) -> Result<Response, BoxError> {
+async fn settings_page_inner(
+    s: AppState,
+    headers: HeaderMap,
+    gid: i64,
+) -> Result<Response, BoxError> {
     let (_, guild) = match authorize(&s, &headers, gid).await? {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
     let Ok((text, _cats, roles)) = lists(&s, guild).await else {
-        return Ok(page("Bot fehlt", &format!("<p>Der Bot ist nicht auf diesem Server. <a href=\"{}\">Jetzt einladen</a></p>", esc(&invite_url(&s.cfg, Some(&gid.to_string()))))).into_response());
+        return Ok(page(
+            "Bot fehlt",
+            &format!(
+                "<p>Der Bot ist nicht auf diesem Server. <a href=\"{}\">Jetzt einladen</a></p>",
+                esc(&invite_url(&s.cfg, Some(&gid.to_string())))
+            ),
+        )
+        .into_response());
     };
     let st = db::get_settings(&s.pool, gid).await?;
     let body = format!(
@@ -377,28 +494,58 @@ struct SettingsForm {
     warn_thresholds: String,
 }
 
-async fn settings_save(State(s): State<AppState>, headers: HeaderMap, Path(gid): Path<i64>, Form(f): Form<SettingsForm>) -> Response {
+async fn settings_save(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(gid): Path<i64>,
+    Form(f): Form<SettingsForm>,
+) -> Response {
     wrap(settings_save_inner(s, headers, gid, f).await)
 }
 
-async fn settings_save_inner(s: AppState, headers: HeaderMap, gid: i64, f: SettingsForm) -> Result<Response, BoxError> {
+async fn settings_save_inner(
+    s: AppState,
+    headers: HeaderMap,
+    gid: i64,
+    f: SettingsForm,
+) -> Result<Response, BoxError> {
     if let Err(r) = authorize(&s, &headers, gid).await? {
         return Ok(r);
     }
     let thresholds = match moderation::parse_thresholds(&f.warn_thresholds) {
         Ok(t) => t,
-        Err(e) => return Ok((StatusCode::BAD_REQUEST, page("Fehler", &format!("<p>Warn-Schwellen: {}</p>", esc(&e)))).into_response()),
+        Err(e) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                page("Fehler", &format!("<p>Warn-Schwellen: {}</p>", esc(&e))),
+            )
+                .into_response())
+        }
     };
-    let words: Vec<String> = f.banned_words.split(',').map(|w| w.trim().to_lowercase()).filter(|w| !w.is_empty()).collect();
+    let words: Vec<String> = f
+        .banned_words
+        .split(',')
+        .map(|w| w.trim().to_lowercase())
+        .filter(|w| !w.is_empty())
+        .collect();
     let msg = f.welcome_message.trim();
     let settings = GuildSettings {
         guild_id: gid,
         modlog_channel: parse_id(&f.modlog_channel),
         welcome_channel: parse_id(&f.welcome_channel),
-        welcome_message: if msg.is_empty() { None } else { Some(msg.to_string()) },
+        welcome_message: if msg.is_empty() {
+            None
+        } else {
+            Some(msg.to_string())
+        },
         autorole_id: parse_id(&f.autorole_id),
         block_invites: f.block_invites.is_some(),
-        spam_max_messages: f.spam_max_messages.trim().parse::<i64>().unwrap_or(0).clamp(0, 100),
+        spam_max_messages: f
+            .spam_max_messages
+            .trim()
+            .parse::<i64>()
+            .unwrap_or(0)
+            .clamp(0, 100),
         banned_words: serde_json::to_string(&words)?,
         warn_thresholds: serde_json::to_string(&thresholds)?,
     };
@@ -408,11 +555,19 @@ async fn settings_save_inner(s: AppState, headers: HeaderMap, gid: i64, f: Setti
 
 // ---------- Tickets ----------
 
-async fn tickets_page(State(s): State<AppState>, headers: HeaderMap, Path(gid): Path<i64>) -> Response {
+async fn tickets_page(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(gid): Path<i64>,
+) -> Response {
     wrap(tickets_page_inner(s, headers, gid).await)
 }
 
-async fn tickets_page_inner(s: AppState, headers: HeaderMap, gid: i64) -> Result<Response, BoxError> {
+async fn tickets_page_inner(
+    s: AppState,
+    headers: HeaderMap,
+    gid: i64,
+) -> Result<Response, BoxError> {
     let (_, guild) = match authorize(&s, &headers, gid).await? {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -447,45 +602,98 @@ struct PanelForm {
     support_role: String,
 }
 
-async fn ticket_panel(State(s): State<AppState>, headers: HeaderMap, Path(gid): Path<i64>, Form(f): Form<PanelForm>) -> Response {
+async fn ticket_panel(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(gid): Path<i64>,
+    Form(f): Form<PanelForm>,
+) -> Response {
     wrap(ticket_panel_inner(s, headers, gid, f).await)
 }
 
-async fn ticket_panel_inner(s: AppState, headers: HeaderMap, gid: i64, f: PanelForm) -> Result<Response, BoxError> {
+async fn ticket_panel_inner(
+    s: AppState,
+    headers: HeaderMap,
+    gid: i64,
+    f: PanelForm,
+) -> Result<Response, BoxError> {
     let (_, guild) = match authorize(&s, &headers, gid).await? {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
     let Some(channel) = parse_id(&f.channel) else {
-        return Ok((StatusCode::BAD_REQUEST, page("Fehler", "<p>Bitte einen Kanal waehlen.</p>")).into_response());
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            page("Fehler", "<p>Bitte einen Kanal waehlen.</p>"),
+        )
+            .into_response());
     };
-    bot::post_ticket_panel(&s.pool, &s.http, guild, ChannelId::new(channel as u64), parse_id(&f.category), parse_id(&f.support_role)).await?;
+    bot::post_ticket_panel(
+        &s.pool,
+        &s.http,
+        guild,
+        ChannelId::new(channel as u64),
+        parse_id(&f.category),
+        parse_id(&f.support_role),
+    )
+    .await?;
     Ok(Redirect::to(&format!("/guild/{gid}/tickets")).into_response())
 }
 
-async fn transcript(State(s): State<AppState>, headers: HeaderMap, Path((gid, tid)): Path<(i64, i64)>) -> Response {
+async fn transcript(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path((gid, tid)): Path<(i64, i64)>,
+) -> Response {
     wrap(transcript_inner(s, headers, gid, tid).await)
 }
 
-async fn transcript_inner(s: AppState, headers: HeaderMap, gid: i64, tid: i64) -> Result<Response, BoxError> {
+async fn transcript_inner(
+    s: AppState,
+    headers: HeaderMap,
+    gid: i64,
+    tid: i64,
+) -> Result<Response, BoxError> {
     if let Err(r) = authorize(&s, &headers, gid).await? {
         return Ok(r);
     }
-    let owned: Option<i64> = sqlx::query_scalar("SELECT number FROM tickets WHERE id = ? AND guild_id = ?")
-        .bind(tid)
-        .bind(gid)
-        .fetch_optional(&s.pool)
-        .await?;
-    let Some(number) = owned else { return Ok((StatusCode::NOT_FOUND, page("Nicht gefunden", "<p>Ticket nicht gefunden.</p>")).into_response()) };
-    let msgs: Vec<(String, String, String)> = sqlx::query_as("SELECT sent_at, author_name, content FROM ticket_messages WHERE ticket_id = ? ORDER BY id")
-        .bind(tid)
-        .fetch_all(&s.pool)
-        .await?;
+    let owned: Option<i64> =
+        sqlx::query_scalar("SELECT number FROM tickets WHERE id = ? AND guild_id = ?")
+            .bind(tid)
+            .bind(gid)
+            .fetch_optional(&s.pool)
+            .await?;
+    let Some(number) = owned else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            page("Nicht gefunden", "<p>Ticket nicht gefunden.</p>"),
+        )
+            .into_response());
+    };
+    let msgs: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT sent_at, author_name, content FROM ticket_messages WHERE ticket_id = ? ORDER BY id",
+    )
+    .bind(tid)
+    .fetch_all(&s.pool)
+    .await?;
     let mut table = String::new();
     for (at, author, content) in msgs {
-        let _ = write!(table, "<tr><td class=\"muted\">{}</td><td>{}</td><td>{}</td></tr>", esc(&at), esc(&author), esc(&content));
+        let _ = write!(
+            table,
+            "<tr><td class=\"muted\">{}</td><td>{}</td><td>{}</td></tr>",
+            esc(&at),
+            esc(&author),
+            esc(&content)
+        );
     }
-    Ok(page("Transkript", &format!("{}<h2>Transkript Ticket #{number:04}</h2><table>{table}</table>", nav(gid))).into_response())
+    Ok(page(
+        "Transkript",
+        &format!(
+            "{}<h2>Transkript Ticket #{number:04}</h2><table>{table}</table>",
+            nav(gid)
+        ),
+    )
+    .into_response())
 }
 
 // ---------- Mod-Log ----------
@@ -514,11 +722,19 @@ async fn modlog_inner(s: AppState, headers: HeaderMap, gid: i64) -> Result<Respo
 
 // ---------- Server-Designer ----------
 
-async fn designer_list(State(s): State<AppState>, headers: HeaderMap, Path(gid): Path<i64>) -> Response {
+async fn designer_list(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(gid): Path<i64>,
+) -> Response {
     wrap(designer_list_inner(s, headers, gid).await)
 }
 
-async fn designer_list_inner(s: AppState, headers: HeaderMap, gid: i64) -> Result<Response, BoxError> {
+async fn designer_list_inner(
+    s: AppState,
+    headers: HeaderMap,
+    gid: i64,
+) -> Result<Response, BoxError> {
     if let Err(r) = authorize(&s, &headers, gid).await? {
         return Ok(r);
     }
@@ -537,33 +753,76 @@ async fn designer_list_inner(s: AppState, headers: HeaderMap, gid: i64) -> Resul
 }
 
 fn find_template(name: &str) -> Option<Template> {
-    template::builtin().into_iter().find(|t| t.name.eq_ignore_ascii_case(name))
+    template::builtin()
+        .into_iter()
+        .find(|t| t.name.eq_ignore_ascii_case(name))
 }
 
-async fn designer_preview(State(s): State<AppState>, headers: HeaderMap, Path((gid, name)): Path<(i64, String)>) -> Response {
+async fn designer_preview(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path((gid, name)): Path<(i64, String)>,
+) -> Response {
     wrap(designer_preview_inner(s, headers, gid, name).await)
 }
 
-async fn designer_preview_inner(s: AppState, headers: HeaderMap, gid: i64, name: String) -> Result<Response, BoxError> {
+async fn designer_preview_inner(
+    s: AppState,
+    headers: HeaderMap,
+    gid: i64,
+    name: String,
+) -> Result<Response, BoxError> {
     let (_, guild) = match authorize(&s, &headers, gid).await? {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    let Some(t) = find_template(&name) else { return Ok((StatusCode::NOT_FOUND, page("Nicht gefunden", "<p>Template unbekannt.</p>")).into_response()) };
+    let Some(t) = find_template(&name) else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            page("Nicht gefunden", "<p>Template unbekannt.</p>"),
+        )
+            .into_response());
+    };
     let snap = crate::designer::snapshot(&s.http, guild).await?;
     let plan = template::plan(&t, &snap);
     let list = |title: &str, items: Vec<String>| {
         if items.is_empty() {
             String::new()
         } else {
-            format!("<h3>{title}</h3><ul>{}</ul>", items.iter().map(|i| format!("<li>{}</li>", esc(i))).collect::<String>())
+            format!(
+                "<h3>{title}</h3><ul>{}</ul>",
+                items
+                    .iter()
+                    .map(|i| format!("<li>{}</li>", esc(i)))
+                    .collect::<String>()
+            )
         }
     };
-    let mut body = format!("{}<h2>{}</h2><p>{}</p>", nav(gid), esc(&t.name), esc(&t.description));
-    body.push_str(&list("Rollen, die erstellt werden", plan.create_roles.clone()));
-    body.push_str(&list("Kategorien, die erstellt werden", plan.create_categories.clone()));
-    body.push_str(&list("Kanaele, die erstellt werden", plan.create_channels.iter().map(|(c, n)| format!("{c} / {n}")).collect()));
-    body.push_str(&list("Bereits vorhanden (uebersprungen)", plan.skipped.clone()));
+    let mut body = format!(
+        "{}<h2>{}</h2><p>{}</p>",
+        nav(gid),
+        esc(&t.name),
+        esc(&t.description)
+    );
+    body.push_str(&list(
+        "Rollen, die erstellt werden",
+        plan.create_roles.clone(),
+    ));
+    body.push_str(&list(
+        "Kategorien, die erstellt werden",
+        plan.create_categories.clone(),
+    ));
+    body.push_str(&list(
+        "Kanaele, die erstellt werden",
+        plan.create_channels
+            .iter()
+            .map(|(c, n)| format!("{c} / {n}"))
+            .collect(),
+    ));
+    body.push_str(&list(
+        "Bereits vorhanden (uebersprungen)",
+        plan.skipped.clone(),
+    ));
     if plan.is_empty() {
         body.push_str("<p>Nichts zu tun: alles ist bereits vorhanden.</p>");
     } else {
@@ -581,22 +840,47 @@ struct ApplyForm {
     confirm: Option<String>,
 }
 
-async fn designer_apply(State(s): State<AppState>, headers: HeaderMap, Path((gid, name)): Path<(i64, String)>, Form(f): Form<ApplyForm>) -> Response {
+async fn designer_apply(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path((gid, name)): Path<(i64, String)>,
+    Form(f): Form<ApplyForm>,
+) -> Response {
     wrap(designer_apply_inner(s, headers, gid, name, f).await)
 }
 
-async fn designer_apply_inner(s: AppState, headers: HeaderMap, gid: i64, name: String, f: ApplyForm) -> Result<Response, BoxError> {
+async fn designer_apply_inner(
+    s: AppState,
+    headers: HeaderMap,
+    gid: i64,
+    name: String,
+    f: ApplyForm,
+) -> Result<Response, BoxError> {
     let (_, guild) = match authorize(&s, &headers, gid).await? {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
     if f.confirm.as_deref() != Some("yes") {
-        return Ok((StatusCode::BAD_REQUEST, page("Fehler", "<p>Bestaetigung fehlt.</p>")).into_response());
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            page("Fehler", "<p>Bestaetigung fehlt.</p>"),
+        )
+            .into_response());
     }
-    let Some(t) = find_template(&name) else { return Ok((StatusCode::NOT_FOUND, page("Nicht gefunden", "<p>Template unbekannt.</p>")).into_response()) };
+    let Some(t) = find_template(&name) else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            page("Nicht gefunden", "<p>Template unbekannt.</p>"),
+        )
+            .into_response());
+    };
     let snap = crate::designer::snapshot(&s.http, guild).await?;
     let plan = template::plan(&t, &snap);
     let log = crate::designer::apply(&s.http, guild, &t, &plan).await?;
     let items: String = log.iter().map(|l| format!("<li>{}</li>", esc(l))).collect();
-    Ok(page("Angewendet", &format!("{}<h2>Template angewendet</h2><ul>{items}</ul>", nav(gid))).into_response())
+    Ok(page(
+        "Angewendet",
+        &format!("{}<h2>Template angewendet</h2><ul>{items}</ul>", nav(gid)),
+    )
+    .into_response())
 }

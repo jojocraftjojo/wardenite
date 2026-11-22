@@ -19,7 +19,8 @@ impl Config {
             client_secret: get("DISCORD_CLIENT_SECRET")?,
             bot_token: get("DISCORD_BOT_TOKEN")?,
             base_url: get("DASHBOARD_BASE_URL")?.trim_end_matches('/').to_string(),
-            database_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://wardenite.db".into()),
+            database_url: std::env::var("DATABASE_URL")
+                .unwrap_or_else(|_| "sqlite://wardenite.db".into()),
             bind_addr: std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".into()),
         })
     }

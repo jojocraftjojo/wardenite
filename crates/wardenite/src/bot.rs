@@ -72,7 +72,11 @@ async fn apply_punishment(
                 serenity::Timestamp::now().unix_timestamp() + i64::from(*minutes) * 60,
             )?;
             guild
-                .edit_member(http, user, serenity::EditMember::new().disable_communication_until_datetime(until))
+                .edit_member(
+                    http,
+                    user,
+                    serenity::EditMember::new().disable_communication_until_datetime(until),
+                )
                 .await?;
         }
     }
@@ -81,40 +85,95 @@ async fn apply_punishment(
 
 /// Slash-Command: Nutzer bannen.
 #[poise::command(slash_command, guild_only, required_permissions = "BAN_MEMBERS")]
-pub async fn ban(ctx: Context<'_>, user: serenity::User, reason: Option<String>) -> Result<(), Error> {
+pub async fn ban(
+    ctx: Context<'_>,
+    user: serenity::User,
+    reason: Option<String>,
+) -> Result<(), Error> {
     let guild = ctx.guild_id().ok_or("nur auf Servern")?;
     let why = reason.as_deref().unwrap_or("kein Grund");
     apply_punishment(ctx.http(), guild, user.id, &Punishment::Ban, why).await?;
-    record_action(&ctx.data().pool, ctx.http(), guild, user.id, ctx.author().id, "ban", reason.as_deref()).await?;
+    record_action(
+        &ctx.data().pool,
+        ctx.http(),
+        guild,
+        user.id,
+        ctx.author().id,
+        "ban",
+        reason.as_deref(),
+    )
+    .await?;
     ctx.say(format!("{} wurde gebannt.", user.tag())).await?;
     Ok(())
 }
 
 /// Slash-Command: Nutzer kicken.
 #[poise::command(slash_command, guild_only, required_permissions = "KICK_MEMBERS")]
-pub async fn kick(ctx: Context<'_>, user: serenity::User, reason: Option<String>) -> Result<(), Error> {
+pub async fn kick(
+    ctx: Context<'_>,
+    user: serenity::User,
+    reason: Option<String>,
+) -> Result<(), Error> {
     let guild = ctx.guild_id().ok_or("nur auf Servern")?;
     let why = reason.as_deref().unwrap_or("kein Grund");
     apply_punishment(ctx.http(), guild, user.id, &Punishment::Kick, why).await?;
-    record_action(&ctx.data().pool, ctx.http(), guild, user.id, ctx.author().id, "kick", reason.as_deref()).await?;
+    record_action(
+        &ctx.data().pool,
+        ctx.http(),
+        guild,
+        user.id,
+        ctx.author().id,
+        "kick",
+        reason.as_deref(),
+    )
+    .await?;
     ctx.say(format!("{} wurde gekickt.", user.tag())).await?;
     Ok(())
 }
 
 /// Slash-Command: Nutzer fuer X Minuten stummschalten.
 #[poise::command(slash_command, guild_only, required_permissions = "MODERATE_MEMBERS")]
-pub async fn timeout(ctx: Context<'_>, user: serenity::User, minutes: u32, reason: Option<String>) -> Result<(), Error> {
+pub async fn timeout(
+    ctx: Context<'_>,
+    user: serenity::User,
+    minutes: u32,
+    reason: Option<String>,
+) -> Result<(), Error> {
     let guild = ctx.guild_id().ok_or("nur auf Servern")?;
     let why = reason.as_deref().unwrap_or("kein Grund");
-    apply_punishment(ctx.http(), guild, user.id, &Punishment::Timeout { minutes }, why).await?;
-    record_action(&ctx.data().pool, ctx.http(), guild, user.id, ctx.author().id, "timeout", reason.as_deref()).await?;
-    ctx.say(format!("{} ist {minutes} Minuten stummgeschaltet.", user.tag())).await?;
+    apply_punishment(
+        ctx.http(),
+        guild,
+        user.id,
+        &Punishment::Timeout { minutes },
+        why,
+    )
+    .await?;
+    record_action(
+        &ctx.data().pool,
+        ctx.http(),
+        guild,
+        user.id,
+        ctx.author().id,
+        "timeout",
+        reason.as_deref(),
+    )
+    .await?;
+    ctx.say(format!(
+        "{} ist {minutes} Minuten stummgeschaltet.",
+        user.tag()
+    ))
+    .await?;
     Ok(())
 }
 
 /// Slash-Command: Verwarnung, loest ggf. automatische Strafe aus.
 #[poise::command(slash_command, guild_only, required_permissions = "MODERATE_MEMBERS")]
-pub async fn warn(ctx: Context<'_>, user: serenity::User, reason: Option<String>) -> Result<(), Error> {
+pub async fn warn(
+    ctx: Context<'_>,
+    user: serenity::User,
+    reason: Option<String>,
+) -> Result<(), Error> {
     let guild = ctx.guild_id().ok_or("nur auf Servern")?;
     let pool = &ctx.data().pool;
     sqlx::query("INSERT INTO warns (guild_id, user_id, moderator_id, reason) VALUES (?,?,?,?)")
@@ -124,12 +183,22 @@ pub async fn warn(ctx: Context<'_>, user: serenity::User, reason: Option<String>
         .bind(&reason)
         .execute(pool)
         .await?;
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM warns WHERE guild_id = ? AND user_id = ?")
-        .bind(guild.get() as i64)
-        .bind(user.id.get() as i64)
-        .fetch_one(pool)
-        .await?;
-    record_action(pool, ctx.http(), guild, user.id, ctx.author().id, "warn", reason.as_deref()).await?;
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM warns WHERE guild_id = ? AND user_id = ?")
+            .bind(guild.get() as i64)
+            .bind(user.id.get() as i64)
+            .fetch_one(pool)
+            .await?;
+    record_action(
+        pool,
+        ctx.http(),
+        guild,
+        user.id,
+        ctx.author().id,
+        "warn",
+        reason.as_deref(),
+    )
+    .await?;
     let settings = db::get_settings(pool, guild.get() as i64).await?;
     let thresholds = settings.thresholds();
     let mut msg = format!("{} verwarnt (Verwarnung Nr. {count}).", user.tag());
@@ -170,21 +239,37 @@ pub async fn purge(ctx: Context<'_>, count: u8) -> Result<(), Error> {
     let guild = ctx.guild_id().ok_or("nur auf Servern")?;
     let limit = count.clamp(1, 100);
     let channel = ctx.channel_id();
-    let msgs = channel.messages(ctx.http(), serenity::GetMessages::new().limit(limit)).await?;
+    let msgs = channel
+        .messages(ctx.http(), serenity::GetMessages::new().limit(limit))
+        .await?;
     let ids: Vec<_> = msgs.iter().map(|m| m.id).collect();
     if ids.len() >= 2 {
         channel.delete_messages(ctx.http(), ids.clone()).await?;
     } else if let Some(id) = ids.first() {
         channel.delete_message(ctx.http(), *id).await?;
     }
-    record_action(&ctx.data().pool, ctx.http(), guild, ctx.author().id, ctx.author().id, "purge", Some(&format!("{} Nachrichten", ids.len()))).await?;
-    ctx.say(format!("{} Nachrichten geloescht.", ids.len())).await?;
+    record_action(
+        &ctx.data().pool,
+        ctx.http(),
+        guild,
+        ctx.author().id,
+        ctx.author().id,
+        "purge",
+        Some(&format!("{} Nachrichten", ids.len())),
+    )
+    .await?;
+    ctx.say(format!("{} Nachrichten geloescht.", ids.len()))
+        .await?;
     Ok(())
 }
 
 /// Slash-Command: Ticket-Panel in diesem Kanal posten.
 #[poise::command(slash_command, guild_only, required_permissions = "MANAGE_GUILD")]
-pub async fn ticketpanel(ctx: Context<'_>, support_role: Option<serenity::Role>, category: Option<serenity::GuildChannel>) -> Result<(), Error> {
+pub async fn ticketpanel(
+    ctx: Context<'_>,
+    support_role: Option<serenity::Role>,
+    category: Option<serenity::GuildChannel>,
+) -> Result<(), Error> {
     let guild = ctx.guild_id().ok_or("nur auf Servern")?;
     post_ticket_panel(
         &ctx.data().pool,
@@ -210,9 +295,11 @@ pub async fn post_ticket_panel(
 ) -> Result<(), Error> {
     let msg = CreateMessage::new()
         .content("**Support**\nKlicke auf den Button, um ein Ticket zu erstellen.")
-        .components(vec![CreateActionRow::Buttons(vec![
-            CreateButton::new("ticket_open").label("Ticket erstellen").style(ButtonStyle::Primary),
-        ])]);
+        .components(vec![CreateActionRow::Buttons(vec![CreateButton::new(
+            "ticket_open",
+        )
+        .label("Ticket erstellen")
+        .style(ButtonStyle::Primary)])]);
     let sent = channel.send_message(http, msg).await?;
     sqlx::query("INSERT INTO ticket_panels (guild_id, channel_id, message_id, category_id, support_role_id) VALUES (?,?,?,?,?)")
         .bind(guild.get() as i64)
@@ -227,24 +314,39 @@ pub async fn post_ticket_panel(
 
 /// Slash-Command: Button-Panel, ueber das sich Mitglieder eine Rolle selbst geben/nehmen.
 #[poise::command(slash_command, guild_only, required_permissions = "MANAGE_ROLES")]
-pub async fn rolepanel(ctx: Context<'_>, role: serenity::Role, label: Option<String>) -> Result<(), Error> {
+pub async fn rolepanel(
+    ctx: Context<'_>,
+    role: serenity::Role,
+    label: Option<String>,
+) -> Result<(), Error> {
     if role.permissions.contains(Permissions::ADMINISTRATOR) {
-        ctx.say("Rollen mit Administrator-Recht koennen nicht per Button vergeben werden.").await?;
+        ctx.say("Rollen mit Administrator-Recht koennen nicht per Button vergeben werden.")
+            .await?;
         return Ok(());
     }
     let text = label.unwrap_or_else(|| role.name.clone());
     let msg = CreateMessage::new()
-        .content(format!("Klicke, um die Rolle **{}** zu erhalten oder zu entfernen.", role.name))
-        .components(vec![CreateActionRow::Buttons(vec![
-            CreateButton::new(format!("role_{}", role.id.get())).label(text).style(ButtonStyle::Secondary),
-        ])]);
+        .content(format!(
+            "Klicke, um die Rolle **{}** zu erhalten oder zu entfernen.",
+            role.name
+        ))
+        .components(vec![CreateActionRow::Buttons(vec![CreateButton::new(
+            format!("role_{}", role.id.get()),
+        )
+        .label(text)
+        .style(ButtonStyle::Secondary)])]);
     ctx.channel_id().send_message(ctx.http(), msg).await?;
     ctx.say("Rollen-Panel erstellt.").await?;
     Ok(())
 }
 
 /// Schreibt ein Ereignis in den Mod-Log-Kanal (falls konfiguriert).
-async fn log_event(pool: &SqlitePool, http: &serenity::Http, guild: GuildId, text: String) -> Result<(), Error> {
+async fn log_event(
+    pool: &SqlitePool,
+    http: &serenity::Http,
+    guild: GuildId,
+    text: String,
+) -> Result<(), Error> {
     let settings = db::get_settings(pool, guild.get() as i64).await?;
     if let Some(ch) = settings.modlog_channel {
         let _ = ChannelId::new(ch as u64).say(http, text).await;
@@ -253,7 +355,16 @@ async fn log_event(pool: &SqlitePool, http: &serenity::Http, guild: GuildId, tex
 }
 
 pub fn commands() -> Vec<poise::Command<Data, Error>> {
-    vec![ban(), kick(), timeout(), warn(), warns(), purge(), ticketpanel(), rolepanel()]
+    vec![
+        ban(),
+        kick(),
+        timeout(),
+        warn(),
+        warns(),
+        purge(),
+        ticketpanel(),
+        rolepanel(),
+    ]
 }
 
 async fn event_handler(
@@ -263,14 +374,38 @@ async fn event_handler(
 ) -> Result<(), Error> {
     match event {
         serenity::FullEvent::Message { new_message } => on_message(ctx, new_message, data).await?,
-        serenity::FullEvent::GuildMemberAddition { new_member } => on_member_join(ctx, new_member, data).await?,
+        serenity::FullEvent::GuildMemberAddition { new_member } => {
+            on_member_join(ctx, new_member, data).await?
+        }
         serenity::FullEvent::GuildMemberRemoval { guild_id, user, .. } => {
-            log_event(&data.pool, &ctx.http, *guild_id, format!("Mitglied hat den Server verlassen: {} (<@{}>)", user.name, user.id.get())).await?;
+            log_event(
+                &data.pool,
+                &ctx.http,
+                *guild_id,
+                format!(
+                    "Mitglied hat den Server verlassen: {} (<@{}>)",
+                    user.name,
+                    user.id.get()
+                ),
+            )
+            .await?;
         }
-        serenity::FullEvent::MessageDelete { channel_id, guild_id: Some(guild_id), .. } => {
-            log_event(&data.pool, &ctx.http, *guild_id, format!("Nachricht geloescht in <#{}>", channel_id.get())).await?;
+        serenity::FullEvent::MessageDelete {
+            channel_id,
+            guild_id: Some(guild_id),
+            ..
+        } => {
+            log_event(
+                &data.pool,
+                &ctx.http,
+                *guild_id,
+                format!("Nachricht geloescht in <#{}>", channel_id.get()),
+            )
+            .await?;
         }
-        serenity::FullEvent::InteractionCreate { interaction: serenity::Interaction::Component(c) } => {
+        serenity::FullEvent::InteractionCreate {
+            interaction: serenity::Interaction::Component(c),
+        } => {
             on_component(ctx, c, data).await?;
         }
         _ => {}
@@ -278,18 +413,25 @@ async fn event_handler(
     Ok(())
 }
 
-async fn on_message(ctx: &serenity::Context, msg: &serenity::Message, data: &Data) -> Result<(), Error> {
+async fn on_message(
+    ctx: &serenity::Context,
+    msg: &serenity::Message,
+    data: &Data,
+) -> Result<(), Error> {
     if msg.author.bot {
         return Ok(());
     }
-    let Some(guild) = msg.guild_id else { return Ok(()) };
+    let Some(guild) = msg.guild_id else {
+        return Ok(());
+    };
     let pool = &data.pool;
 
     // Ticket-Transkript: Nachrichten in offenen Ticket-Kanaelen mitschreiben.
-    let ticket: Option<i64> = sqlx::query_scalar("SELECT id FROM tickets WHERE channel_id = ? AND state != 'closed'")
-        .bind(msg.channel_id.get() as i64)
-        .fetch_optional(pool)
-        .await?;
+    let ticket: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM tickets WHERE channel_id = ? AND state != 'closed'")
+            .bind(msg.channel_id.get() as i64)
+            .fetch_optional(pool)
+            .await?;
     if let Some(tid) = ticket {
         sqlx::query("INSERT INTO ticket_messages (ticket_id, author_id, author_name, content, sent_at) VALUES (?,?,?,?,?)")
             .bind(tid)
@@ -306,7 +448,9 @@ async fn on_message(ctx: &serenity::Context, msg: &serenity::Message, data: &Dat
         .member
         .as_ref()
         .and_then(|m| m.permissions)
-        .is_some_and(|p| p.contains(Permissions::MANAGE_MESSAGES) || p.contains(Permissions::ADMINISTRATOR));
+        .is_some_and(|p| {
+            p.contains(Permissions::MANAGE_MESSAGES) || p.contains(Permissions::ADMINISTRATOR)
+        });
     if exempt {
         return Ok(());
     }
@@ -316,7 +460,10 @@ async fn on_message(ctx: &serenity::Context, msg: &serenity::Message, data: &Dat
         let q = map.entry((guild.get(), msg.author.id.get())).or_default();
         let now = Instant::now();
         q.push_back(now);
-        while q.front().is_some_and(|t| now.duration_since(*t) > SPAM_WINDOW) {
+        while q
+            .front()
+            .is_some_and(|t| now.duration_since(*t) > SPAM_WINDOW)
+        {
             q.pop_front();
         }
         q.len() as u32
@@ -328,31 +475,63 @@ async fn on_message(ctx: &serenity::Context, msg: &serenity::Message, data: &Dat
             Violation::BannedWord(_) => "Diese Nachricht enthaelt ein verbotenes Wort.",
             Violation::Spam => "Bitte nicht spammen.",
         };
-        let _ = msg.channel_id.say(&ctx.http, format!("<@{}> {label}", msg.author.id.get())).await;
+        let _ = msg
+            .channel_id
+            .say(&ctx.http, format!("<@{}> {label}", msg.author.id.get()))
+            .await;
         let bot_id = ctx.cache.current_user().id;
-        record_action(pool, &ctx.http, guild, msg.author.id, bot_id, "automod", Some(label)).await?;
+        record_action(
+            pool,
+            &ctx.http,
+            guild,
+            msg.author.id,
+            bot_id,
+            "automod",
+            Some(label),
+        )
+        .await?;
     }
     Ok(())
 }
 
-async fn on_member_join(ctx: &serenity::Context, member: &serenity::Member, data: &Data) -> Result<(), Error> {
+async fn on_member_join(
+    ctx: &serenity::Context,
+    member: &serenity::Member,
+    data: &Data,
+) -> Result<(), Error> {
     let settings = db::get_settings(&data.pool, member.guild_id.get() as i64).await?;
-    log_event(&data.pool, &ctx.http, member.guild_id, format!("Mitglied beigetreten: <@{}>", member.user.id.get())).await?;
+    log_event(
+        &data.pool,
+        &ctx.http,
+        member.guild_id,
+        format!("Mitglied beigetreten: <@{}>", member.user.id.get()),
+    )
+    .await?;
     if let Some(role) = settings.autorole_id {
         let _ = member.add_role(&ctx.http, RoleId::new(role as u64)).await;
     }
     if let Some(ch) = settings.welcome_channel {
-        let template = settings.welcome_message.unwrap_or_else(|| "Willkommen {user}!".into());
+        let template = settings
+            .welcome_message
+            .unwrap_or_else(|| "Willkommen {user}!".into());
         let text = template.replace("{user}", &format!("<@{}>", member.user.id.get()));
         let _ = ChannelId::new(ch as u64).say(&ctx.http, text).await;
     }
     Ok(())
 }
 
-async fn respond(ctx: &serenity::Context, c: &serenity::ComponentInteraction, text: &str) -> Result<(), Error> {
+async fn respond(
+    ctx: &serenity::Context,
+    c: &serenity::ComponentInteraction,
+    text: &str,
+) -> Result<(), Error> {
     c.create_response(
         &ctx.http,
-        CreateInteractionResponse::Message(CreateInteractionResponseMessage::new().content(text).ephemeral(true)),
+        CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content(text)
+                .ephemeral(true),
+        ),
     )
     .await?;
     Ok(())
@@ -360,18 +539,27 @@ async fn respond(ctx: &serenity::Context, c: &serenity::ComponentInteraction, te
 
 fn state_from_row(state: &str, claimed_by: Option<i64>, closed_by: Option<i64>) -> TicketState {
     match state {
-        "claimed" => TicketState::Claimed { by: claimed_by.unwrap_or(0) as u64 },
-        "closed" => TicketState::Closed { by: closed_by.unwrap_or(0) as u64 },
+        "claimed" => TicketState::Claimed {
+            by: claimed_by.unwrap_or(0) as u64,
+        },
+        "closed" => TicketState::Closed {
+            by: closed_by.unwrap_or(0) as u64,
+        },
         _ => TicketState::Open,
     }
 }
 
-async fn is_staff(pool: &SqlitePool, c: &serenity::ComponentInteraction, guild: GuildId) -> Result<bool, Error> {
-    let Some(member) = &c.member else { return Ok(false) };
-    if member
-        .permissions
-        .is_some_and(|p| p.contains(Permissions::MANAGE_MESSAGES) || p.contains(Permissions::ADMINISTRATOR))
-    {
+async fn is_staff(
+    pool: &SqlitePool,
+    c: &serenity::ComponentInteraction,
+    guild: GuildId,
+) -> Result<bool, Error> {
+    let Some(member) = &c.member else {
+        return Ok(false);
+    };
+    if member.permissions.is_some_and(|p| {
+        p.contains(Permissions::MANAGE_MESSAGES) || p.contains(Permissions::ADMINISTRATOR)
+    }) {
         return Ok(true);
     }
     let role: Option<Option<i64>> = sqlx::query_scalar(
@@ -380,23 +568,52 @@ async fn is_staff(pool: &SqlitePool, c: &serenity::ComponentInteraction, guild: 
     .bind(guild.get() as i64)
     .fetch_optional(pool)
     .await?;
-    Ok(role.flatten().is_some_and(|r| member.roles.contains(&RoleId::new(r as u64))))
+    Ok(role
+        .flatten()
+        .is_some_and(|r| member.roles.contains(&RoleId::new(r as u64))))
 }
 
-async fn on_component(ctx: &serenity::Context, c: &serenity::ComponentInteraction, data: &Data) -> Result<(), Error> {
-    let Some(guild) = c.guild_id else { return Ok(()) };
+async fn on_component(
+    ctx: &serenity::Context,
+    c: &serenity::ComponentInteraction,
+    data: &Data,
+) -> Result<(), Error> {
+    let Some(guild) = c.guild_id else {
+        return Ok(());
+    };
     let pool = &data.pool;
-    if let Some(id) = c.data.custom_id.strip_prefix("role_").and_then(|v| v.parse::<u64>().ok()).filter(|v| *v > 0) {
-        let Some(member) = &c.member else { return Ok(()) };
+    if let Some(id) = c
+        .data
+        .custom_id
+        .strip_prefix("role_")
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|v| *v > 0)
+    {
+        let Some(member) = &c.member else {
+            return Ok(());
+        };
         let role = RoleId::new(id);
         let result = if member.roles.contains(&role) {
-            member.remove_role(&ctx.http, role).await.map(|_| "Rolle entfernt.")
+            member
+                .remove_role(&ctx.http, role)
+                .await
+                .map(|_| "Rolle entfernt.")
         } else {
-            member.add_role(&ctx.http, role).await.map(|_| "Rolle hinzugefuegt.")
+            member
+                .add_role(&ctx.http, role)
+                .await
+                .map(|_| "Rolle hinzugefuegt.")
         };
         return match result {
             Ok(msg) => respond(ctx, c, msg).await,
-            Err(_) => respond(ctx, c, "Die Rolle konnte nicht vergeben werden (Rollen-Hierarchie des Bots pruefen).").await,
+            Err(_) => {
+                respond(
+                    ctx,
+                    c,
+                    "Die Rolle konnte nicht vergeben werden (Rollen-Hierarchie des Bots pruefen).",
+                )
+                .await
+            }
         };
     }
     match c.data.custom_id.as_str() {
@@ -416,45 +633,72 @@ async fn on_component(ctx: &serenity::Context, c: &serenity::ComponentInteractio
             .fetch_optional(pool)
             .await?;
             let (category, support_role) = panel.unwrap_or((None, None));
-            let number: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(number), 0) + 1 FROM tickets WHERE guild_id = ?")
-                .bind(guild.get() as i64)
-                .fetch_one(pool)
-                .await?;
+            let number: i64 = sqlx::query_scalar(
+                "SELECT COALESCE(MAX(number), 0) + 1 FROM tickets WHERE guild_id = ?",
+            )
+            .bind(guild.get() as i64)
+            .fetch_one(pool)
+            .await?;
 
-            let view = Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES | Permissions::READ_MESSAGE_HISTORY;
+            let view = Permissions::VIEW_CHANNEL
+                | Permissions::SEND_MESSAGES
+                | Permissions::READ_MESSAGE_HISTORY;
             let mut overwrites = vec![
                 PermissionOverwrite {
                     allow: Permissions::empty(),
                     deny: Permissions::VIEW_CHANNEL,
                     kind: PermissionOverwriteType::Role(RoleId::new(guild.get())),
                 },
-                PermissionOverwrite { allow: view, deny: Permissions::empty(), kind: PermissionOverwriteType::Member(c.user.id) },
-                PermissionOverwrite { allow: view, deny: Permissions::empty(), kind: PermissionOverwriteType::Member(ctx.cache.current_user().id) },
+                PermissionOverwrite {
+                    allow: view,
+                    deny: Permissions::empty(),
+                    kind: PermissionOverwriteType::Member(c.user.id),
+                },
+                PermissionOverwrite {
+                    allow: view,
+                    deny: Permissions::empty(),
+                    kind: PermissionOverwriteType::Member(ctx.cache.current_user().id),
+                },
             ];
             if let Some(r) = support_role {
-                overwrites.push(PermissionOverwrite { allow: view, deny: Permissions::empty(), kind: PermissionOverwriteType::Role(RoleId::new(r as u64)) });
+                overwrites.push(PermissionOverwrite {
+                    allow: view,
+                    deny: Permissions::empty(),
+                    kind: PermissionOverwriteType::Role(RoleId::new(r as u64)),
+                });
             }
-            let mut builder = CreateChannel::new(channel_name(number as u32)).kind(ChannelType::Text).permissions(overwrites);
+            let mut builder = CreateChannel::new(channel_name(number as u32))
+                .kind(ChannelType::Text)
+                .permissions(overwrites);
             if let Some(cat) = category {
                 builder = builder.category(ChannelId::new(cat as u64));
             }
             let channel = guild.create_channel(&ctx.http, builder).await?;
-            sqlx::query("INSERT INTO tickets (guild_id, number, channel_id, opener_id) VALUES (?,?,?,?)")
-                .bind(guild.get() as i64)
-                .bind(number)
-                .bind(channel.id.get() as i64)
-                .bind(c.user.id.get() as i64)
-                .execute(pool)
-                .await?;
+            sqlx::query(
+                "INSERT INTO tickets (guild_id, number, channel_id, opener_id) VALUES (?,?,?,?)",
+            )
+            .bind(guild.get() as i64)
+            .bind(number)
+            .bind(channel.id.get() as i64)
+            .bind(c.user.id.get() as i64)
+            .execute(pool)
+            .await?;
             channel
                 .id
                 .send_message(
                     &ctx.http,
                     CreateMessage::new()
-                        .content(format!("<@{}> willkommen! Beschreibe dein Anliegen, das Team meldet sich.", c.user.id.get()))
+                        .content(format!(
+                            "<@{}> willkommen! Beschreibe dein Anliegen, das Team meldet sich.",
+                            c.user.id.get()
+                        ))
                         .components(vec![CreateActionRow::Buttons(vec![
-                            CreateButton::new("ticket_claim").label("Uebernehmen").style(ButtonStyle::Success),
-                            CreateButton::new("ticket_close").label("Schliessen").style(ButtonStyle::Danger),
+                            CreateButton::new("ticket_claim")
+                                .label("Uebernehmen")
+                                .style(ButtonStyle::Success),
+                            CreateButton::new("ticket_close")
+                                .label("Schliessen")
+                                .style(ButtonStyle::Danger),
                         ])]),
                 )
                 .await?;
@@ -479,22 +723,29 @@ async fn on_component(ctx: &serenity::Context, c: &serenity::ComponentInteractio
                 }
                 match current.claim(user) {
                     Ok(_) => {
-                        sqlx::query("UPDATE tickets SET state = 'claimed', claimed_by = ? WHERE id = ?")
-                            .bind(user as i64)
-                            .bind(id)
-                            .execute(pool)
-                            .await?;
+                        sqlx::query(
+                            "UPDATE tickets SET state = 'claimed', claimed_by = ? WHERE id = ?",
+                        )
+                        .bind(user as i64)
+                        .bind(id)
+                        .execute(pool)
+                        .await?;
                         respond(ctx, c, "Ticket uebernommen.").await?;
-                        c.channel_id.say(&ctx.http, format!("<@{user}> hat das Ticket uebernommen.")).await?;
+                        c.channel_id
+                            .say(&ctx.http, format!("<@{user}> hat das Ticket uebernommen."))
+                            .await?;
                         Ok(())
                     }
-                    Err(e @ (TicketError::AlreadyClaimed(_) | TicketError::AlreadyClosed | TicketError::NotClaimed)) => {
-                        respond(ctx, c, &e.to_string()).await
-                    }
+                    Err(
+                        e @ (TicketError::AlreadyClaimed(_)
+                        | TicketError::AlreadyClosed
+                        | TicketError::NotClaimed),
+                    ) => respond(ctx, c, &e.to_string()).await,
                 }
             } else {
                 if !staff && opener as u64 != user {
-                    return respond(ctx, c, "Nur Ticket-Ersteller oder Team koennen schliessen.").await;
+                    return respond(ctx, c, "Nur Ticket-Ersteller oder Team koennen schliessen.")
+                        .await;
                 }
                 match current.close(user) {
                     Ok(_) => {
@@ -531,11 +782,16 @@ pub async fn run(token: String, pool: SqlitePool) -> Result<(), Error> {
         .setup(|ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                Ok(Data { pool, spam: Mutex::new(HashMap::new()) })
+                Ok(Data {
+                    pool,
+                    spam: Mutex::new(HashMap::new()),
+                })
             })
         })
         .build();
-    let mut client = serenity::ClientBuilder::new(token, intents).framework(framework).await?;
+    let mut client = serenity::ClientBuilder::new(token, intents)
+        .framework(framework)
+        .await?;
     client.start().await?;
     Ok(())
 }
