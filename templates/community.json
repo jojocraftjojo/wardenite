@@ -1,0 +1,29 @@
+{
+  "name": "Community",
+  "description": "Allgemeiner Community-Server mit Info-, Chat- und Voice-Bereich.",
+  "roles": [
+    {"name": "Admin", "color": "E74C3C", "hoist": true, "permissions": ["ADMINISTRATOR"]},
+    {"name": "Moderator", "color": "3498DB", "hoist": true, "mentionable": true, "permissions": ["KICK_MEMBERS", "MODERATE_MEMBERS", "MANAGE_MESSAGES"]},
+    {"name": "Mitglied", "color": "2ECC71"}
+  ],
+  "categories": [
+    {"name": "Info", "channels": [
+      {"name": "willkommen", "kind": "text", "read_only": true},
+      {"name": "regeln", "kind": "text", "read_only": true},
+      {"name": "ankuendigungen", "kind": "announcement", "read_only": true}
+    ]},
+    {"name": "Chat", "channels": [
+      {"name": "allgemein", "kind": "text"},
+      {"name": "medien", "kind": "text"},
+      {"name": "bot-befehle", "kind": "text"}
+    ]},
+    {"name": "Voice", "channels": [
+      {"name": "Lounge", "kind": "voice"},
+      {"name": "Musik", "kind": "voice"}
+    ]},
+    {"name": "Team", "visible_to": ["Admin", "Moderator"], "channels": [
+      {"name": "mod-log", "kind": "text"},
+      {"name": "team-chat", "kind": "text"}
+    ]}
+  ]
+}

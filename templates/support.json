@@ -1,0 +1,26 @@
+{
+  "name": "Support",
+  "description": "Support-Server fuer Produkte mit Ticketbereich, FAQ und Team-Kanaelen.",
+  "roles": [
+    {"name": "Admin", "color": "E74C3C", "hoist": true, "permissions": ["ADMINISTRATOR"]},
+    {"name": "Support", "color": "1ABC9C", "hoist": true, "mentionable": true, "permissions": ["MANAGE_MESSAGES", "MODERATE_MEMBERS"]},
+    {"name": "Kunde", "color": "95A5A6"}
+  ],
+  "categories": [
+    {"name": "Info", "channels": [
+      {"name": "willkommen", "kind": "text", "read_only": true},
+      {"name": "faq", "kind": "text", "read_only": true},
+      {"name": "status", "kind": "announcement", "read_only": true}
+    ]},
+    {"name": "Hilfe", "channels": [
+      {"name": "ticket-erstellen", "kind": "text", "read_only": true},
+      {"name": "community-hilfe", "kind": "forum"}
+    ]},
+    {"name": "Tickets", "visible_to": ["Admin", "Support"], "channels": []},
+    {"name": "Team", "visible_to": ["Admin", "Support"], "channels": [
+      {"name": "mod-log", "kind": "text"},
+      {"name": "ticket-transkripte", "kind": "text"},
+      {"name": "team-chat", "kind": "text"}
+    ]}
+  ]
+}

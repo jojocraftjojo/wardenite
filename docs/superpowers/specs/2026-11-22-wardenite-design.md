@@ -1,4 +1,6 @@
-# Wardenite – Design (Entwurf, wartet auf Freigabe)
+# Wardenite – Design
+
+> Entscheidungen unten sind meine Calls unter dem `/goal` (ohne weitere Rückfrage), nicht vom Nutzer bestätigt.
 
 ## Ziel
 Open-Source-Discord-Bot in Rust mit Web-Dashboard. Funktionsumfang orientiert an Galaxy Bot, Sapphire und Ticket Tool. Nutzer laden den Bot über das Dashboard ein und verwalten alles dort: Moderation, Ticketsystem, Server-Designer mit Templates.
@@ -17,11 +19,11 @@ Open-Source-Discord-Bot in Rust mit Web-Dashboard. Funktionsumfang orientiert an
 2. **Workspace mit zwei Binaries (`bot`, `api`) über gemeinsame Datenbank.** Sauber getrennt, unabhängig neustartbar. Nachteil: mehr Deployment-Aufwand, Events zwischen Bot und API brauchen Postgres LISTEN/NOTIFY oder Redis.
 3. **Leptos (Rust-Fullstack) statt SvelteKit.** Eine Sprache im ganzen Projekt. Nachteil: kleineres Ökosystem, langsamere Builds, weniger UI-Bausteine.
 
-**Empfehlung: Ansatz 2.** Er skaliert besser und entspricht dem Betrieb bei großen Bots. Beim Start nutzen wir PostgreSQL für alles inklusive Events. Falls du Einfachheit vorziehst, ist Ansatz 1 die Alternative.
+**Gewählt (mein Call): Ansatz 1 mit Cargo-Workspace.** Crates `core`, `bot`, `web`, aber ein einziges Binary `wardenite`, das Bot und API per `tokio` gemeinsam startet. Kein IPC, Deployment ist eine Datei per SFTP. Aufteilen in zwei Binaries ist später billig.
 
 ## Technik (meine Entscheidungen)
-- Bot: `poise` auf `serenity`. API: `axum`. Datenbank: PostgreSQL mit `sqlx`. Login: Discord OAuth2.
-- Dashboard: SvelteKit mit Tailwind, als statischer Build vom API-Server ausgeliefert.
+- Bot: `poise` auf `serenity`. API: `axum`. Datenbank: SQLite mit `sqlx` (Tests laufen ohne Datenbankserver, der Server braucht nichts Extra; Postgres später als Migration). Login: Discord OAuth2.
+- Dashboard: axum + askama + htmx, serverseitig gerendert, Assets im Binary eingebettet. Eine Toolchain, ein Build.
 - Templates für den Server-Designer: YAML/JSON-Dateien im Repo (Kategorien, Kanäle, Rollen, Berechtigungen). Der Designer wendet sie über die Discord-API an und zeigt vorher eine Vorschau mit Diff.
 - Der Designer-Assistent (Server "komplett designen lassen") nutzt zuerst nur Templates. KI-Generierung ist eine spätere Option.
 

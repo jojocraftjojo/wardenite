@@ -1,0 +1,30 @@
+{
+  "name": "Gaming",
+  "description": "Gaming-Clan mit Spielebereichen, LFG und Voice-Raeumen.",
+  "roles": [
+    {"name": "Clan-Leitung", "color": "F1C40F", "hoist": true, "permissions": ["ADMINISTRATOR"]},
+    {"name": "Moderator", "color": "3498DB", "hoist": true, "permissions": ["KICK_MEMBERS", "MODERATE_MEMBERS", "MANAGE_MESSAGES"]},
+    {"name": "Spieler", "color": "9B59B6"}
+  ],
+  "categories": [
+    {"name": "Info", "channels": [
+      {"name": "regeln", "kind": "text", "read_only": true},
+      {"name": "news", "kind": "announcement", "read_only": true}
+    ]},
+    {"name": "Community", "channels": [
+      {"name": "allgemein", "kind": "text"},
+      {"name": "memes", "kind": "text"},
+      {"name": "mitspieler-suche", "kind": "forum"}
+    ]},
+    {"name": "Voice", "channels": [
+      {"name": "Lobby", "kind": "voice"},
+      {"name": "Team 1", "kind": "voice"},
+      {"name": "Team 2", "kind": "voice"},
+      {"name": "AFK", "kind": "voice"}
+    ]},
+    {"name": "Leitung", "visible_to": ["Clan-Leitung", "Moderator"], "channels": [
+      {"name": "mod-log", "kind": "text"},
+      {"name": "planung", "kind": "text"}
+    ]}
+  ]
+}

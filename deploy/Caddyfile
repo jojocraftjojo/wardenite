@@ -1,0 +1,8 @@
+# Variante A: eigene Domain, Caddy holt automatisch das HTTPS-Zertifikat.
+dashboard.example.com {
+    reverse_proxy 127.0.0.1:8080
+}
+# Variante B (ohne Domain): Tailscale Funnel auf dem Server
+#   sudo tailscale funnel --bg 8080
+# Die Funnel-URL (https://<host>.<tailnet>.ts.net) wird als DASHBOARD_BASE_URL
+# und als Redirect-URI im Discord Developer Portal eingetragen.

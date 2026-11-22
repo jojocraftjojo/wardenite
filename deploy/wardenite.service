@@ -1,0 +1,18 @@
+[Unit]
+Description=Wardenite Discord bot and dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=wardenite
+WorkingDirectory=/opt/wardenite
+EnvironmentFile=/opt/wardenite/.env
+ExecStart=/opt/wardenite/wardenite
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/wardenite
+
+[Install]
+WantedBy=multi-user.target
